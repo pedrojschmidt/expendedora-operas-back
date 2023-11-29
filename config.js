@@ -5,7 +5,7 @@ config.debug = process.env.DEBUG || true;
 config.mqtt  = {};
 config.mqtt.namespace = process.env.MQTT_NAMESPACE || '#';
 // config.mqtt.hostname  = process.env.MQTT_HOSTNAME  || '172.31.86.248';
-config.mqtt.hostname  = process.env.MQTT_HOSTNAME  || '54.234.75.47';
+config.mqtt.hostname  = process.env.MQTT_HOSTNAME  || '34.224.89.203';
 config.mqtt.port      = process.env.MQTT_PORT      || 1883;
 
 config.mongodb = {};
