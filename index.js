@@ -21,10 +21,10 @@ const url = 'mongodb://' + config.mongodb.hostname + ':' + config.mongodb.port +
 
 
 var mqttUri  = 'mqtt://' + config.mqtt.hostname + ':' + config.mqtt.port;
-const client = mqtt.connect(mqttUri);
+const mqttClient = mqtt.connect(mqttUri);
 
-client.on("connect", () => {
-    client.subscribe("+", (err) => {
+mqttClient.on("connect", () => {
+    mqttClient.subscribe("+", (err) => {
         if (!err) {
             console.log("Client connected");
         }
@@ -33,7 +33,7 @@ client.on("connect", () => {
     console.log("Client connected");
 });
 
-client.on("message", (topic, message) => {
+mqttClient.on("message", (topic, message) => {
     // message is Buffer
     console.log(message.toString());
     if (topic === "addStock") {
@@ -124,39 +124,42 @@ app.post('/addStock', async (req, res) => {
 app.post('/buy', async (req, res) => {
     const client = new MongoClient(url);
     try {
-        // Connect to the database
         await client.connect();
         console.log('Conexión exitosa a la base de datos');
 
-        // Access the database and collection
         const database = client.db(config.mongodb.database);
         const collection = database.collection('compras');
 
-        // Suponiendo que tienes un campo 'numero' en tu registro que quieres actualizar
-        const filter = { _id: ObjectId('id_del_registro_a_actualizar') };
+        const filter = { tipo: 'stock' }; // Filtro para obtener el registro de stock
 
-        // Buscar el registro existente en la base de datos
-        const existingRecord = await collection.findOne(filter);
+        const existingStock = await collection.findOne(filter);
 
-        if (!existingRecord) {
-            return res.status(404).send('Registro no encontrado');
+        if (!existingStock) {
+            return res.status(404).send('Registro de stock no encontrado');
         }
 
-        // Restar uno al número existente
-        existingRecord.numero -= 1;
+        // Restar uno al número de stock
+        existingStock.numero -= 1;
 
-        const updateResult = await collection.updateOne(filter, { $set: { numero: existingRecord.numero } });
+        const updateResult = await collection.updateOne(
+            filter,
+            { $set: { numero: existingStock.numero } }
+        );
 
-        console.log(`Registro actualizado: ${updateResult.modifiedCount}`);
+        console.log(`Stock actualizado en la base de datos: ${updateResult.modifiedCount}`);
 
-        res.send('Número restado correctamente');
+        // Publicar un mensaje genérico en el topic proporcionado en req.body.topic
+        mqttClient.publish(req.body.topic, 'Compra realizada');
+
+        res.send('Número restado correctamente al stock');
     } catch (error) {
         console.error('Error al conectar a la base de datos:', error);
-        res.status(500).send('Error al guardar en la base de datos');
+        res.status(500).send('Error al restar el número al stock en la base de datos');
     } finally {
-        await client.close(); // Cerrar la conexión al finalizar
+        await client.close();
     }
 });
+
 
 app.get('/getStock', async (req, res) => {
     const client = new MongoClient(url);
