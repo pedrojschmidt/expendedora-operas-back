@@ -36,23 +36,28 @@ mqttClient.on("connect", () => {
 mqttClient.on("message", (topic, message) => {
     // message is Buffer
     console.log(message.toString());
-    if (topic === "addStock") {
-        addStock(message.toString());
+    if (topic === "OPERAS/originals/addStock") {
+        addStock("stock_originals", message.toString());
+    }
+    else if (topic === "OPERAS/chocolate/addStock") {
+        addStock("stock_chocolate", message.toString());
+    }
+    else if (topic === "OPERAS/strawberry/addStock") {
+        addStock("stock_strawberry", message.toString());
     }
 });
 
-const addStock = async (stockValue) => {
+const addStock = async (type, stockValue) => {
     const client = new MongoClient(url);
     try {
         await client.connect();
-        console.log('Conexión exitosa a la base de datos');
 
         const database = client.db(config.mongodb.database);
         const collection = database.collection('compras');
 
         const additionalStock = parseInt(stockValue); // Convertir el valor a un número si es necesario
 
-        const filter = { tipo: 'stock' };
+        const filter = { tipo: type };
 
         const existingStock = await collection.findOne(filter);
 
@@ -64,11 +69,11 @@ const addStock = async (stockValue) => {
                 { $set: { numero: updatedStock } }
             );
 
-            console.log(`Stock actualizado en la base de datos: ${additionalStock}`);
+            console.log(`${type} actualizado en la base de datos: +${additionalStock}u`);
         } else {
-            const result = await collection.insertOne({ tipo: 'stock', numero: additionalStock });
+            const result = await collection.insertOne({ tipo: type, numero: additionalStock });
 
-            console.log(`Stock agregado a la base de datos con el ID: ${result.insertedId}`);
+            console.log(`${type} agregado a la base de datos con el ID: ${result.insertedId}`);
         }
     } catch (error) {
         console.error('Error al conectar a la base de datos:', error);
@@ -79,9 +84,9 @@ const addStock = async (stockValue) => {
 
 app.post('/addStock', async (req, res) => {
     const client = new MongoClient(url);
+    const type = req.body.type;
     try {
         await client.connect();
-        console.log('Conexión exitosa a la base de datos');
 
         const database = client.db(config.mongodb.database);
         const collection = database.collection('compras');
@@ -89,7 +94,7 @@ app.post('/addStock', async (req, res) => {
         const additionalStock = req.body.stock; // Suponiendo que recibes la cantidad adicional de stock en el cuerpo de la solicitud
 
         // Verificar si ya existe un registro de stock en la base de datos
-        const existingStock = await collection.findOne({ tipo: 'stock' }); // Podría ser cualquier identificador único para el stock
+        const existingStock = await collection.findOne({ tipo: type }); // Podría ser cualquier identificador único para el stock
 
         if (existingStock) {
             // Si el stock ya existe, actualizar el valor existente sumándole la cantidad adicional
@@ -97,18 +102,18 @@ app.post('/addStock', async (req, res) => {
 
             // Actualizar el registro de stock en la base de datos
             const result = await collection.updateOne(
-                { tipo: 'stock' },
+                { tipo: type },
                 { $set: { numero: updatedStock } }
             );
 
-            console.log(`Stock actualizado en la base de datos: ${additionalStock}`);
+            console.log(`${type} actualizado en la base de datos: +${additionalStock}u`);
 
             res.send('Cantidad adicional de stock agregada correctamente');
         } else {
             // Si el stock no existe, crear un nuevo registro de stock con la cantidad proporcionada
-            const result = await collection.insertOne({ tipo: 'stock', numero: additionalStock });
+            const result = await collection.insertOne({ tipo: type, numero: additionalStock });
 
-            console.log(`Stock agregado a la base de datos con el ID: ${result.insertedId}`);
+            console.log(`${type} agregado a la base de datos con el ID: ${result.insertedId}`);
 
             res.send('Stock agregado correctamente');
         }
@@ -123,14 +128,15 @@ app.post('/addStock', async (req, res) => {
 
 app.post('/buy', async (req, res) => {
     const client = new MongoClient(url);
+    const type = req.body.type;
+    const topic = req.body.topic;
     try {
         await client.connect();
-        console.log('Conexión exitosa a la base de datos');
 
         const database = client.db(config.mongodb.database);
         const collection = database.collection('compras');
 
-        const filter = { tipo: 'stock' }; // Filtro para obtener el registro de stock
+        const filter = { tipo: type }; // Filtro para obtener el registro de stock
 
         const existingStock = await collection.findOne(filter);
 
@@ -146,31 +152,31 @@ app.post('/buy', async (req, res) => {
             { $set: { numero: existingStock.numero } }
         );
 
-        console.log(`Stock actualizado en la base de datos: ${updateResult.modifiedCount}`);
+        console.log(`${type} actualizado en la base de datos: -${updateResult.modifiedCount}u`);
 
         // Publicar un mensaje genérico en el topic proporcionado en req.body.topic
-        mqttClient.publish(req.body.topic, 'Compra realizada');
+        mqttClient.publish(topic, 'Compra realizada');
 
         res.send('Número restado correctamente al stock');
     } catch (error) {
         console.error('Error al conectar a la base de datos:', error);
-        res.status(500).send('Error al restar el número al stock en la base de datos');
+        res.status(500).send(`Error al restar el número al ${type} en la base de datos`);
     } finally {
         await client.close();
     }
 });
 
 
-app.get('/getStock', async (req, res) => {
+app.post('/getStock', async (req, res) => {
     const client = new MongoClient(url);
+    const type = req.body.type;
     try {
         await client.connect();
-        console.log('Conexión exitosa a la base de datos');
 
         const database = client.db(config.mongodb.database);
         const collection = database.collection('compras');
 
-        const filter = { tipo: 'stock' }; // Filtro para buscar el registro de stock
+        const filter = { tipo: type }; // Filtro para buscar el registro de stock
 
         const existingStock = await collection.findOne(filter);
 
@@ -183,7 +189,7 @@ app.get('/getStock', async (req, res) => {
         res.json({ stock });
     } catch (error) {
         console.error('Error al conectar a la base de datos:', error);
-        res.status(500).send('Error al obtener el stock desde la base de datos');
+        res.status(500).send(`Error al obtener el ${type} desde la base de datos`);
     } finally {
         await client.close();
     }
