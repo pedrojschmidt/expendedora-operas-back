@@ -36,16 +36,52 @@ mqttClient.on("connect", () => {
 mqttClient.on("message", (topic, message) => {
     // message is Buffer
     console.log(message.toString());
-    if (topic === "OPERAS/originals/addStock") {
+    if (topic === "OPERAS_originals_addStock") {
         addStock("stock_originals", message.toString());
     }
-    else if (topic === "OPERAS/chocolate/addStock") {
+    else if (topic === "OPERAS_chocolate_addStock") {
         addStock("stock_chocolate", message.toString());
     }
-    else if (topic === "OPERAS/strawberry/addStock") {
+    else if (topic === "OPERAS_strawberry_addStock") {
         addStock("stock_strawberry", message.toString());
     }
+    else if (topic === "MACHINE_inService") {
+        const messageBoolean = message.toString().toLowerCase() === "true";
+        updateService(messageBoolean);
+    }
 });
+
+const updateService = async (newState) => {
+    const client = new MongoClient(url);
+    const type = "inService";
+    try {
+        await client.connect();
+
+        const database = client.db(config.mongodb.database);
+        const collection = database.collection(config.mongodb.collection);
+
+        const filter = { type: type };
+
+        const inService = await collection.findOne(filter);
+
+        if (inService) {
+            const result = await collection.updateOne(
+                filter,
+                { $set: { state: newState } }
+            );
+
+            console.log(`${type} actualizado en la base de datos: ${newState}`);
+        } else {
+            const result = await collection.insertOne({ type: type, state: false });
+
+            console.log(`${type} agregado a la base de datos con el ID: ${result.insertedId}`);
+        }
+    } catch (error) {
+        console.error('Error al conectar a la base de datos:', error);
+    } finally {
+        await client.close();
+    }
+};
 
 const addStock = async (type, stockValue) => {
     const client = new MongoClient(url);
