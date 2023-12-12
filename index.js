@@ -118,6 +118,36 @@ const addStock = async (type, stockValue) => {
     }
 };
 
+app.get('/checkMachineOpen', async (req, res) => {
+    const client = new MongoClient(url);
+    const type = "machineOpen";
+    try {
+        await client.connect();
+
+        const database = client.db(config.mongodb.database);
+        const collection = database.collection(config.mongodb.collection);
+
+        // Verificar si ya existe un registro de inService en la base de datos
+        const existingIsOpen = await collection.findOne({ type: type });
+
+        if (existingIsOpen) {
+            res.send({ isMachineOpen: existingIsOpen.state});
+        } else {
+            // Si el inService no existe, crear un nuevo registro de inService con el estado en false
+            const result = await collection.insertOne({ type: type, state: false });
+
+            console.log(`${type} agregado a la base de datos con el ID: ${result.insertedId}`);
+
+            res.send({ isMachineOpen: false });
+        }
+    } catch (error) {
+        console.error('Error al conectar a la base de datos:', error);
+        res.status(500).send('Error al obtener el estado de la máquina');
+    } finally {
+        await client.close();
+    }
+})
+
 app.get('/checkService', async (req, res) => {
     const client = new MongoClient(url);
     const type = "inService";
